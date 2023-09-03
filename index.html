@@ -165,83 +165,6 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="http://example.com/2023/09/03/%E5%88%86%E6%94%AF%E5%88%86%E5%8C%96/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/images/avatar.gif">
-      <meta itemprop="name" content="Acelex">
-      <meta itemprop="description" content="">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="MyBlog">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2023/09/03/%E5%88%86%E6%94%AF%E5%88%86%E5%8C%96/" class="post-title-link" itemprop="url">分支分化</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">发表于</span>
-              
-
-              <time title="创建时间：2023-09-03 20:13:46 / 修改时间：20:56:32" itemprop="dateCreated datePublished" datetime="2023-09-03T20:13:46+08:00">2023-09-03</time>
-            </span>
-
-          
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <h2 id="并行规约问题"><a href="#并行规约问题" class="headerlink" title="并行规约问题"></a>并行规约问题</h2><p>以对整数数组求和为例：</p>
-<p>相邻配对：相邻的数一组，进行求和，然后重复该过程。</p>
-<p><img src="/%E5%88%86%E6%94%AF%E5%88%86%E5%8C%96%5C3-19.png" alt="image-20230903201718083"></p>
-<p>交错配对：根据给定的跨度配对元素</p>
-<p><img src="/%E5%88%86%E6%94%AF%E5%88%86%E5%8C%96%5C3-20.png" alt="image-20230903201718083"></p>
-<h2 id="并行规约中的分化"><a href="#并行规约中的分化" class="headerlink" title="并行规约中的分化"></a>并行规约中的分化</h2><p>下面是相邻配对中的一种实现：</p>
-<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">reduceNeibored</span><span class="params">(<span class="type">int</span>* g_idata, <span class="type">int</span>* g_odata, <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="type">int</span> idx = blockDim.x * blockIdx.x + threadIdx.x;</span><br><span class="line">	<span class="type">int</span> tid = threadIdx.x;</span><br><span class="line">	<span class="keyword">if</span> (idx &gt;= size)<span class="keyword">return</span>;</span><br><span class="line">	<span class="type">int</span> stride;</span><br><span class="line">	<span class="type">int</span>* idata = g_idata + blockIdx.x * blockDim.x;</span><br><span class="line">	<span class="keyword">for</span> (stride = <span class="number">1</span>; stride &lt; blockDim.x; stride *= <span class="number">2</span>)<span class="comment">//注意边界</span></span><br><span class="line">	&#123;</span><br><span class="line">		<span class="keyword">if</span> (tid % (<span class="number">2</span>*stride) == <span class="number">0</span>)</span><br><span class="line">		&#123;</span><br><span class="line">			idata[tid] += idata[tid + stride];</span><br><span class="line">		&#125;</span><br><span class="line">		__syncthreads();</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span>(tid==<span class="number">0</span>)</span><br><span class="line">		g_odata[blockIdx.x] = idata[<span class="number">0</span>];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>其中size是待求和的数组大小，g_odata保存是每一个块的求和结果（每一个数据块的大小为blockDim.x）。</p>
-<p>__syncthreads()可以实现块内线程同步，也即进入下一次迭代前，当前迭代轮次的部分和已经存入数组中。</p>
-<p>将g_odata复制回主机后，还需要进行求和才是最终结果。</p>
-<p>发现会产生线程束分化现象。以图3-19例子为例，第一轮只有偶数号线程执行。</p>
-<h2 id="避免分化"><a href="#避免分化" class="headerlink" title="避免分化"></a>避免分化</h2><p>可以通过改变线程和数组中元素的对应关系避免线程束分化（也就是不一定线程0对应0号元素，线程1对应1号元素…），改进代码如下：</p>
-<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">reduceNeiboredLess</span><span class="params">(<span class="type">int</span>* g_idata, <span class="type">int</span>* g_odata, <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="type">int</span> idx = blockDim.x * blockIdx.x + threadIdx.x;</span><br><span class="line">	<span class="type">int</span> tid = threadIdx.x;</span><br><span class="line">	<span class="keyword">if</span> (idx &gt;= size)<span class="keyword">return</span>;</span><br><span class="line">	<span class="type">int</span> stride;</span><br><span class="line">	<span class="type">int</span>* idata = g_idata + blockIdx.x * blockDim.x;</span><br><span class="line">	<span class="keyword">for</span> (stride = <span class="number">1</span>; stride &lt; blockDim.x; stride *= <span class="number">2</span>)</span><br><span class="line">	&#123;</span><br><span class="line">		<span class="type">int</span> index = <span class="number">2</span> * stride * tid;</span><br><span class="line">		<span class="keyword">if</span> (index &lt; blockDim.x)</span><br><span class="line">		&#123;</span><br><span class="line">			idata[index] = idata[index] + idata[index + stride];</span><br><span class="line">		&#125;</span><br><span class="line">		__syncthreads();</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> (tid == <span class="number">0</span>)</span><br><span class="line">		g_odata[blockIdx.x] = idata[<span class="number">0</span>];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-<p>改进后，前一半线程执行规约，后一半进程什么也不做。</p>
-<p>也可以使用交错配对的方式避免线程束分化：</p>
-<figure class="highlight c++"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br></pre></td><td class="code"><pre><span class="line"><span class="function">__global__ <span class="type">void</span> <span class="title">reduceInterleaved</span><span class="params">(<span class="type">int</span>* g_idata, <span class="type">int</span>* g_odata, <span class="type">int</span> size)</span></span></span><br><span class="line"><span class="function"></span>&#123;</span><br><span class="line">	<span class="type">int</span> idx = blockDim.x * blockIdx.x + threadIdx.x;</span><br><span class="line">	<span class="type">int</span> tid = threadIdx.x;</span><br><span class="line">	<span class="keyword">if</span> (idx &gt;= size)<span class="keyword">return</span>;</span><br><span class="line">	<span class="type">int</span> stride;</span><br><span class="line">	<span class="type">int</span>* idata = g_idata + blockIdx.x * blockDim.x;</span><br><span class="line">	<span class="keyword">for</span> (stride = blockDim.x/<span class="number">2</span>; stride &gt;=<span class="number">1</span>; stride /= <span class="number">2</span>)<span class="comment">//注意边界</span></span><br><span class="line">	&#123;</span><br><span class="line">		<span class="keyword">if</span> (tid &lt; stride)</span><br><span class="line">		&#123;</span><br><span class="line">			idata[tid] = idata[tid] + idata[tid + stride];</span><br><span class="line">		&#125;</span><br><span class="line">		__syncthreads();</span><br><span class="line">	&#125;</span><br><span class="line">	<span class="keyword">if</span> (tid == <span class="number">0</span>)</span><br><span class="line">		g_odata[blockIdx.x] = idata[<span class="number">0</span>];</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
-
-
-      
-    </div>
-
-    
-    
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
     <link itemprop="mainEntityOfPage" href="http://example.com/2022/04/22/hello-world/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
@@ -374,15 +297,9 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">2</span>
+          <span class="site-state-item-count">1</span>
           <span class="site-state-item-name">日志</span>
         </a>
-      </div>
-      <div class="site-state-item site-state-tags">
-            <a href="/tags/">
-          
-        <span class="site-state-item-count">1</span>
-        <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
 </div>
